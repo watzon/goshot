@@ -4,7 +4,7 @@
 <a href="https://goreportcard.com/report/github.com/watzon/goshot"><img src="https://goreportcard.com/badge/github.com/watzon/goshot" alt="Go Report Card"></a>
 <a href="LICENSE"><img src="https://img.shields.io/github/license/watzon/goshot" alt="License"></a>
 
-Goshot is a powerful Go library and CLI tool for creating beautiful screenshots of code and terminal command output with customizable window chrome, syntax highlighting, and backgrounds. Similar to [Carbon](https://carbon.now.sh) and [Silicon](https://github.com/Aloxaf/Silicon), Goshot allows you to create stunning visual representations of your code snippets for documentation, presentations, or social media sharing.
+Goshot is a Go library and CLI for creating beautiful screenshots of code and terminal output, with syntax highlighting, window chrome, and rich backgrounds. Similar to [Carbon](https://carbon.now.sh) and [Silicon](https://github.com/Aloxaf/Silicon).
 
 <div align="center">
     <img src=".github/example.png">
@@ -12,56 +12,76 @@ Goshot is a powerful Go library and CLI tool for creating beautiful screenshots 
 
 ## ✨ Features
 
-- 🎨 Beautiful syntax highlighting with multiple themes
-- 🖼 Customizable window chrome (macOS, Windows, Linux styles)
-- 🌈 Various background options (solid colors, gradients, images)
-- 🔤 Custom font support
-- 📏 Adjustable padding and margins
-- 💾 Multiple export formats (PNG, JPEG)
-- 🛠 Both CLI and library interfaces
-- 🚀 Command execution support
+- 🎨 Syntax highlighting with hundreds of themes (chroma)
+- 🖥 Terminal output rendering with full ANSI color support
+- 🖼 Window chrome styles: macOS, Windows 11, GNOME, KDE Breeze
+- 🌈 Backgrounds: solid colors, seven gradient types, and images
+- 🕶 Automatic redaction of secrets (API keys, tokens, passwords)
+- 💧 Drop shadows, rounded corners, blur effects
+- 🔤 Embedded fonts plus system font discovery
+- 💾 PNG, JPEG, and BMP export; clipboard and stdout output
+- 🚀 Run a command and screenshot its output in one step
 
-## Quick Start
-
-### Installation
-
-> [!NOTE]  
-> The CLI is a work in progress, but should be more or less functional.
+## Installation
 
 ```bash
-# Install the CLI tool
+# CLI
 go install github.com/watzon/goshot/cmd/goshot@latest
 
-# Install the library
+# Library
 go get github.com/watzon/goshot
 ```
 
-#### Package Managers
-
-##### Arch Linux (AUR)
+Packages are also available for [Arch (AUR)](https://aur.archlinux.org/packages/goshot-bin) and [Ubuntu (PPA)](https://launchpad.net/~watzon/+archive/ubuntu/goshot):
 
 ```bash
-# Using yay
-yay -S goshot-bin
-
-# Using paru
-paru -S goshot-bin
-```
-
-##### Ubuntu/Debian
-
-```bash
-# Add the PPA
-sudo add-apt-repository ppa:watzon/goshot
-sudo apt update
-
-# Install goshot
+yay -S goshot-bin                          # Arch
+sudo add-apt-repository ppa:watzon/goshot  # Ubuntu
 sudo apt install goshot
 ```
 
 [![Packaging status](https://repology.org/badge/vertical-allrepos/goshot.svg)](https://repology.org/project/goshot/versions)
 
-### Basic Usage
+## CLI
+
+```bash
+# Screenshot a file
+goshot main.go -o main.png
+
+# Read from stdin, write to the clipboard
+cat main.go | goshot -c
+
+# Pick a theme, chrome, and background
+goshot main.go -t catppuccin-mocha -C gnome -b '#1e1e2e'
+
+# Gradient background with highlighted lines
+goshot main.go --gradient-type linear \
+    --gradient-stops '#4158D0;0' --gradient-stops '#C850C0;100' \
+    --highlight-lines 10..14
+
+# Redact secrets before sharing
+goshot config.go --redact --redact-style blur
+
+# Run a command and screenshot its output
+goshot exec -A -p -- go test ./...
+```
+
+Run `goshot --help` for the full flag list, and `goshot themes`, `goshot fonts`, or `goshot languages` to see what's available.
+
+### Configuration
+
+Defaults for any flag can be set in `~/.config/goshot/config.yaml` as a flat map of flag names to values. Flags given on the command line always win.
+
+```yaml
+theme: catppuccin-mocha
+chrome: mac
+background: "#1e1e2e"
+corner-radius: 12
+```
+
+## Library
+
+The library is a small pipeline: **content** (code or terminal output) is rendered to an image, wrapped in **chrome**, and placed on a **background**.
 
 ```go
 package main
@@ -70,68 +90,59 @@ import (
     "image/color"
     "log"
 
+    "github.com/watzon/goshot"
     "github.com/watzon/goshot/background"
     "github.com/watzon/goshot/chrome"
-    "github.com/watzon/goshot/render"
+    "github.com/watzon/goshot/code"
 )
 
 func main() {
-    // Create a new canvas with macOS chrome and gradient background
-    canvas := render.NewCanvas().
-        SetChrome(chrome.NewMacChrome(chrome.WithTitle("Hello World"))).
-        SetBackground(
-            background.NewGradientBackground(
-                background.LinearGradient,
-                background.GradientStop{Color: color.RGBA{R: 26, G: 27, B: 38, A: 255}, Position: 0},
-                background.GradientStop{Color: color.RGBA{R: 40, G: 42, B: 54, A: 255}, Position: 1},
-            ).
-                SetAngle(45).
-                SetPadding(40).
-                SetCornerRadius(8).
-                SetShadow(
-                    background.NewShadow().
-                        SetOffset(0, 3).
-                        SetBlur(20).
-                        SetSpread(8).
-                        SetColor(color.RGBA{R: 0, G: 0, B: 0, A: 200}),
-                ),
+    err := goshot.New().
+        WithContent(code.New(`fmt.Println("Hello, goshot!")`).
+            WithLanguage("go").
+            WithTheme("dracula")).
+        WithChrome(chrome.Mac().WithTitle("hello.go").Dark()).
+        WithBackground(background.Gradient(background.LinearGradient,
+            background.Stop{Color: color.RGBA{26, 27, 38, 255}, Position: 0},
+            background.Stop{Color: color.RGBA{40, 42, 54, 255}, Position: 1},
         ).
-        SetCodeStyle(&render.CodeStyle{
-            Language:        "go",
-            Theme:           "dracula",
-            TabWidth:        4,
-            ShowLineNumbers: true,
-        })
-
-    // Render code to file
-    code := `func main() {
-        fmt.Println("Hello, World!")
-    }`
-    
-    img, err := canvas.RenderToImage(code)
+            WithAngle(45).
+            WithPadding(60).
+            WithCornerRadius(10).
+            WithShadow(background.NewShadow().WithBlur(20).WithOffset(0, 8))).
+        Save("hello.png")
     if err != nil {
-        log.Fatal(err)
-    }
-    
-    if err := render.SaveAsPNG(img, "code.png"); err != nil {
         log.Fatal(err)
     }
 }
 ```
 
-## Documentation
+Terminal output works the same way with the `term` package:
 
-For detailed documentation, examples, and guides, please visit our [Wiki](https://github.com/watzon/goshot/wiki):
+```go
+content := term.New(ansiOutput).
+    WithTheme("catppuccin-mocha").
+    WithAutoSize()
 
-- [Installation Guide](https://github.com/watzon/goshot/wiki/Installation) - Detailed installation instructions
-- [Library Usage](https://github.com/watzon/goshot/wiki/Library-Usage) - Library documentation and examples
-- [Configuration](https://github.com/watzon/goshot/wiki/Configuration) - Configuration options and customization
-- [Contributing](https://github.com/watzon/goshot/wiki/Contributing) - Guidelines for contributing
+img, err := goshot.New().
+    WithContent(content).
+    WithChrome(chrome.Mac().Dark()).
+    Image()
+```
 
-## Star History
+See [`examples/`](examples/) for runnable programs covering gradients, terminal rendering, and redaction.
 
-[![Star History Chart](https://api.star-history.com/svg?repos=watzon/goshot&type=Date)](https://star-history.com/#watzon/goshot&Date)
+### Packages
+
+| Package      | Purpose                                              |
+| ------------ | ---------------------------------------------------- |
+| `goshot`     | The canvas pipeline and image export                 |
+| `code`       | Syntax-highlighted code rendering                    |
+| `term`       | Terminal output rendering (ANSI escapes, 256 colors) |
+| `chrome`     | Window decorations (mac, windows, gnome, breeze)     |
+| `background` | Solid, gradient, and image backdrops                 |
+| `fonts`      | Embedded and system font loading                     |
 
 ## License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+This project is licensed under the MIT License — see the [LICENSE](LICENSE) file for details.
