@@ -216,26 +216,24 @@ func (r *Renderer) Render() (image.Image, error) {
 		for _, tok := range rw.tokens {
 			face := faces.pick(tok)
 			if len(rw.line.redacted) == 0 {
-				drawString(img, face, tok.text, x, y+ascent, tok.color, tok.underline)
-				x += font.MeasureString(face, tok.text).Round()
+				x += drawText(img, face, tok.text, x, y+ascent, tok.color, tok.underline)
 				col += len(tok.text)
 				continue
 			}
-			// Character-by-character so redacted spans can be replaced.
-			for _, ch := range tok.text {
-				s := string(ch)
-				w := font.MeasureString(face, s).Round()
+			// Unit-by-unit so redacted spans can be replaced.
+			for _, u := range units(tok.text) {
+				w := measureText(face, u)
 				switch {
 				case !covered(col, rw.line.redacted):
-					drawString(img, face, s, x, y+ascent, tok.color, tok.underline)
+					drawText(img, face, u, x, y+ascent, tok.color, tok.underline)
 				case blurStyle:
-					drawString(img, face, s, x, y+ascent, tok.color, tok.underline)
+					drawText(img, face, u, x, y+ascent, tok.color, tok.underline)
 					blurRects = append(blurRects, image.Rect(x, y, x+w, y+lineHeight))
 				default:
-					drawString(img, face, "█", x, y+ascent, tok.color, false)
+					drawString(img, face, blocksFor(face, w), x, y+ascent, tok.color, false)
 				}
 				x += w
-				col++
+				col += len(u)
 			}
 		}
 		y += lineHeight
@@ -392,12 +390,103 @@ func drawString(img *image.RGBA, face font.Face, s string, x, y int, col color.C
 	}
 }
 
+// drawText draws s at the baseline y, routing emoji clusters to the
+// system emoji font, and returns the width drawn.
+func drawText(img *image.RGBA, face font.Face, s string, x, y int, col color.Color, underline bool) int {
+	start := x
+	for _, run := range fonts.SplitEmoji(s) {
+		if run.Emoji {
+			x += drawEmoji(img, face, run.Text, x, y, col)
+			continue
+		}
+		drawString(img, face, run.Text, x, y, col, false)
+		x += font.MeasureString(face, run.Text).Round()
+	}
+	if underline {
+		uy := y + face.Metrics().Descent.Round()/2
+		draw.Draw(img, image.Rect(start, uy, x, uy+1), image.NewUniform(col), image.Point{}, draw.Over)
+	}
+	return x - start
+}
+
+// drawEmoji draws one emoji cluster centered in a two-space em box on
+// the baseline, falling back to the code font when the cluster cannot be
+// rendered as emoji.
+func drawEmoji(img *image.RGBA, face font.Face, cluster string, x, baseline int, col color.Color) int {
+	if e := fonts.Emoji(); e != nil {
+		m := face.Metrics()
+		adv := emojiAdvance(face)
+		box := image.Rect(x, baseline-m.Ascent.Ceil(), x+adv, baseline+m.Descent.Ceil())
+		if e.Draw(img, cluster, box, col) {
+			return adv
+		}
+	}
+	drawString(img, face, cluster, x, baseline, col, false)
+	return font.MeasureString(face, cluster).Round()
+}
+
+// measureText is the measuring counterpart of drawText.
+func measureText(face font.Face, s string) int {
+	w := 0
+	for _, run := range fonts.SplitEmoji(s) {
+		if run.Emoji && emojiRenderable(face, run.Text) {
+			w += emojiAdvance(face)
+		} else {
+			w += font.MeasureString(face, run.Text).Round()
+		}
+	}
+	return w
+}
+
+// emojiAdvance is the horizontal space an emoji occupies: two cells, as
+// in terminals and code editors.
+func emojiAdvance(face font.Face) int {
+	return font.MeasureString(face, "  ").Round()
+}
+
+// blocksFor returns enough full-block characters to cover width pixels,
+// so redacting a wide unit (an emoji) leaves no gap.
+func blocksFor(face font.Face, width int) string {
+	bw := font.MeasureString(face, "█").Round()
+	n := 1
+	if bw > 0 {
+		n = max(1, (width+bw/2)/bw)
+	}
+	return strings.Repeat("█", n)
+}
+
+func emojiRenderable(face font.Face, cluster string) bool {
+	e := fonts.Emoji()
+	if e == nil {
+		return false
+	}
+	m := face.Metrics()
+	_, ok := e.Render(cluster, float64(m.Ascent.Ceil()+m.Descent.Ceil()), color.Black)
+	return ok
+}
+
+// units splits a string into indivisible drawing units: single runes of
+// plain text and whole emoji clusters.
+func units(s string) []string {
+	var out []string
+	for _, run := range fonts.SplitEmoji(s) {
+		if run.Emoji {
+			out = append(out, run.Text)
+			continue
+		}
+		for _, ch := range run.Text {
+			out = append(out, string(ch))
+		}
+	}
+	return out
+}
+
 // --- wrapping ----------------------------------------------------------
 
 func rowWidth(tokens []token, faces faceSet) int {
 	w := 0
 	for _, t := range tokens {
-		w += font.MeasureString(faces.pick(t), t.text).Round()
+		w += measureText(faces.pick(t), t.text)
 	}
 	return w
 }
@@ -419,17 +508,17 @@ func wrapLine(l *visLine, faces faceSet, maxWidth int) []row {
 
 	for _, tok := range l.tokens {
 		face := faces.pick(tok)
-		w := font.MeasureString(face, tok.text).Round()
+		w := measureText(face, tok.text)
 		if width+w <= maxWidth {
 			current = append(current, tok)
 			width += w
 			col += len(tok.text)
 			continue
 		}
-		// Split the token rune by rune across rows.
+		// Split the token unit by unit across rows.
 		part, partW := "", 0
-		for _, ch := range tok.text {
-			cw := font.MeasureString(face, string(ch)).Round()
+		for _, u := range units(tok.text) {
+			cw := measureText(face, u)
 			if width+partW+cw > maxWidth && (len(part) > 0 || len(current) > 0) {
 				if part != "" {
 					sub := tok
@@ -440,7 +529,7 @@ func wrapLine(l *visLine, faces faceSet, maxWidth int) []row {
 				flush()
 				part, partW = "", 0
 			}
-			part += string(ch)
+			part += u
 			partW += cw
 		}
 		if part != "" {

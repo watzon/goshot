@@ -113,14 +113,24 @@ func (r *Renderer) Render() (image.Image, error) {
 	img := image.NewRGBA(image.Rect(0, 0, cols*cellW, rows*cellH))
 	draw.Draw(img, img.Bounds(), image.NewUniform(theme.Background), image.Point{}, draw.Src)
 
+	// Backgrounds first, in full: a wide glyph overlaps the continuation
+	// cells to its right, which must not repaint over it afterwards.
+	for y := 0; y < min(rows, len(g.cells)); y++ {
+		for x := 0; x < min(cols, len(g.cells[y])); x++ {
+			if bg := g.cells[y][x].bg; bg != theme.Background {
+				rect := image.Rect(x*cellW, y*cellH, (x+1)*cellW, (y+1)*cellH)
+				draw.Draw(img, rect, image.NewUniform(bg), image.Point{}, draw.Src)
+			}
+		}
+	}
+
 	for y := 0; y < min(rows, len(g.cells)); y++ {
 		for x := 0; x < min(cols, len(g.cells[y])); x++ {
 			c := g.cells[y][x]
-			if c.bg != theme.Background {
-				rect := image.Rect(x*cellW, y*cellH, (x+1)*cellW, (y+1)*cellH)
-				draw.Draw(img, rect, image.NewUniform(c.bg), image.Point{}, draw.Src)
+			if c.s == "" || c.s == " " {
+				continue
 			}
-			if c.ch == 0 || c.ch == ' ' {
+			if fonts.IsEmoji(c.s) && r.drawEmoji(img, g, x, y, cellW, cellH) {
 				continue
 			}
 			d := &font.Drawer{
@@ -132,10 +142,25 @@ func (r *Renderer) Render() (image.Image, error) {
 					Y: fixed.I(y*cellH + int(r.fontSize)),
 				},
 			}
-			d.DrawString(string(c.ch))
+			d.DrawString(c.s)
 		}
 	}
 	return img, nil
+}
+
+// drawEmoji draws the emoji cluster at (x, y) into the cells it spans,
+// reporting whether it could be rendered as emoji.
+func (r *Renderer) drawEmoji(img *image.RGBA, g *grid, x, y, cellW, cellH int) bool {
+	e := fonts.Emoji()
+	if e == nil {
+		return false
+	}
+	span := 1
+	for x+span < len(g.cells[y]) && g.cells[y][x+span].s == "" {
+		span++
+	}
+	box := image.Rect(x*cellW, y*cellH, (x+span)*cellW, (y+1)*cellH)
+	return e.Draw(img, g.cells[y][x].s, box, g.cells[y][x].fg)
 }
 
 // faces returns [regular, bold, italic, bold-italic].

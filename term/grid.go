@@ -12,8 +12,11 @@ type attributes struct {
 	bold, italic, underline, strike bool
 }
 
+// cell holds one terminal cell: a whole grapheme cluster (possibly an
+// emoji sequence), or "" for the continuation of a wide cluster to its
+// left.
 type cell struct {
-	ch    rune
+	s     string
 	fg    color.Color
 	bg    color.Color
 	attrs attributes
@@ -51,7 +54,7 @@ func newGrid(cols, rows int, pad [4]int, theme *Theme, autoSize bool) *grid {
 }
 
 func (g *grid) grow(w, h int) {
-	blank := cell{ch: ' ', fg: g.theme.Foreground, bg: g.theme.Background}
+	blank := cell{s: " ", fg: g.theme.Foreground, bg: g.theme.Background}
 	for y := range g.cells {
 		for len(g.cells[y]) < w {
 			g.cells[y] = append(g.cells[y], blank)
@@ -67,17 +70,22 @@ func (g *grid) grow(w, h int) {
 	g.width, g.height = max(g.width, w), max(g.height, h)
 }
 
-func (g *grid) set(x, y int, ch rune) {
-	if x < g.padL || y < g.padT {
+// set writes one grapheme cluster spanning w cells at (x, y), marking
+// the cells behind a wide cluster as continuations.
+func (g *grid) set(x, y int, s string, w int) {
+	if x < g.padL || y < g.padT || w < 1 {
 		return
 	}
 	if g.autoSize {
-		g.maxX, g.maxY = max(g.maxX, x+1), max(g.maxY, y+1)
-		g.grow(max(g.width, x+1), max(g.height, y+1))
-	} else if x >= g.width || y >= g.height {
+		g.maxX, g.maxY = max(g.maxX, x+w), max(g.maxY, y+1)
+		g.grow(max(g.width, x+w), max(g.height, y+1))
+	} else if x+w > g.width || y >= g.height {
 		return
 	}
-	g.cells[y][x] = cell{ch: ch, fg: g.fg, bg: g.bg, attrs: g.attrs}
+	g.cells[y][x] = cell{s: s, fg: g.fg, bg: g.bg, attrs: g.attrs}
+	for i := 1; i < w; i++ {
+		g.cells[y][x+i] = cell{fg: g.fg, bg: g.bg, attrs: g.attrs}
+	}
 }
 
 func (g *grid) newline() {
@@ -102,8 +110,8 @@ func (g *grid) parse(input []byte) {
 			continue
 		}
 		if width > 0 {
-			g.set(g.curX, g.curY, []rune(string(seq))[0])
-			g.curX++
+			g.set(g.curX, g.curY, string(seq), width)
+			g.curX += width
 			if g.width > 0 && g.curX >= g.width {
 				g.newline()
 			}
@@ -166,7 +174,7 @@ func (g *grid) csi(s string) {
 		case 2:
 			from = 0
 		}
-		blank := cell{ch: ' ', fg: g.theme.Foreground, bg: g.theme.Background}
+		blank := cell{s: " ", fg: g.theme.Foreground, bg: g.theme.Background}
 		for x := from; x < to; x++ {
 			g.cells[g.curY][x] = blank
 		}
