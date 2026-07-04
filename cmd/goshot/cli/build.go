@@ -120,6 +120,24 @@ func buildChrome(args []string) (*chrome.Chrome, error) {
 	if opts.autoTitle && len(args) > 0 {
 		title = args[0]
 	}
+	switch opts.titleBarColor {
+	case "":
+	case "auto":
+		win.WithTitleBarMatchingContent()
+	default:
+		c, err := parseHexColor(opts.titleBarColor)
+		if err != nil {
+			return nil, fmt.Errorf("invalid title bar color: %w", err)
+		}
+		win.WithTitleBarColor(c)
+	}
+	if opts.titleTextColor != "" {
+		c, err := parseHexColor(opts.titleTextColor)
+		if err != nil {
+			return nil, fmt.Errorf("invalid title text color: %w", err)
+		}
+		win.WithTitleTextColor(c)
+	}
 	return win.WithTitle(title).WithCornerRadius(opts.windowRadius), nil
 }
 

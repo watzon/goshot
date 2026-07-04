@@ -16,6 +16,7 @@ Goshot is a Go library and CLI for creating beautiful screenshots of code and te
 - 🖥 Terminal output rendering with full ANSI color support
 - 🖼 Window chrome styles: macOS, Windows 11, GNOME, KDE Breeze
 - 🌈 Backgrounds: solid colors, seven gradient types, and images
+- 😀 Color emoji in code and terminal output (uses the system emoji font)
 - 🕶 Automatic redaction of secrets (API keys, tokens, passwords)
 - 💧 Drop shadows, rounded corners, blur effects
 - 🔤 Embedded fonts plus system font discovery
@@ -64,6 +65,9 @@ goshot config.go --redact --redact-style blur
 
 # Run a command and screenshot its output
 goshot exec -A -p -- go test ./...
+
+# Blend the title bar into the content for a seamless window
+goshot exec -A -p --title-bar-color auto -- ls -la
 ```
 
 Run `goshot --help` for the full flag list, and `goshot themes`, `goshot fonts`, or `goshot languages` to see what's available.
@@ -126,9 +130,15 @@ content := term.New(ansiOutput).
 
 img, err := goshot.New().
     WithContent(content).
-    WithChrome(chrome.Mac().Dark()).
+    WithChrome(chrome.Mac().Dark().WithTitleBarMatchingContent()).
     Image()
 ```
+
+`WithTitleBarMatchingContent` blends the title bar into the content's
+background; `WithTitleBarColor` and `WithTitleTextColor` set explicit
+colors. Emoji — including flags, skin tones, and ZWJ sequences like
+👨‍👩‍👧‍👦 — render automatically through the system emoji font (Apple
+Color Emoji, Noto Color Emoji, or any font with "emoji" in its filename).
 
 See [`examples/`](examples/) for runnable programs covering gradients, terminal rendering, and redaction.
 

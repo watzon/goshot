@@ -24,22 +24,24 @@ type options struct {
 	toStdout      bool
 
 	// appearance
-	chromeStyle  string
-	lightMode    bool
-	theme        string
-	language     string
-	font         string
-	lineHeight   float64
-	background   string
-	bgImage      string
-	bgImageFit   string
-	bgBlur       float64
-	bgBlurType   string
-	cornerRadius float64
-	noWindow     bool
-	windowTitle  string
-	windowRadius float64
-	autoTitle    bool
+	chromeStyle    string
+	lightMode      bool
+	theme          string
+	language       string
+	font           string
+	lineHeight     float64
+	background     string
+	bgImage        string
+	bgImageFit     string
+	bgBlur         float64
+	bgBlurType     string
+	cornerRadius   float64
+	noWindow       bool
+	windowTitle    string
+	windowRadius   float64
+	autoTitle      bool
+	titleBarColor  string
+	titleTextColor string
 
 	// gradient
 	gradientType      string
@@ -182,6 +184,8 @@ func appearanceFlags() *pflag.FlagSet {
 	fs.BoolVar(&opts.noWindow, "no-window-controls", false, "Hide the window title bar and controls")
 	fs.StringVar(&opts.windowTitle, "window-title", "", "Window title text")
 	fs.Float64Var(&opts.windowRadius, "window-corner-radius", 10, "Corner radius of the window")
+	fs.StringVar(&opts.titleBarColor, "title-bar-color", "", "Title bar color (hex, or 'auto' to match the content)")
+	fs.StringVar(&opts.titleTextColor, "title-text-color", "", "Title text color (hex)")
 	fs.StringSliceVar(&opts.lineRanges, "line-range", nil, "Line ranges to render (e.g. 5..10)")
 	fs.StringSliceVar(&opts.highlights, "highlight-lines", nil, "Line ranges to highlight")
 	fs.BoolVar(&opts.noLineNumbers, "no-line-numbers", false, "Hide line numbers")

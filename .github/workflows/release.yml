@@ -9,30 +9,7 @@ permissions:
   id-token: write
 
 jobs:
-  update-version:
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-          ref: main
-      - name: Update version
-        run: |
-          DATE=$(date -u +"%Y-%m-%d")
-          sed -i "s/const Version = \".*\"/const Version = \"${GITHUB_REF_NAME}\"/" pkg/version/version.go
-          sed -i "s/const Revision = \".*\"/const Revision = \"${GITHUB_SHA}\"/" pkg/version/version.go
-          sed -i "s/const Date = \".*\"/const Date = \"${DATE}\"/" pkg/version/version.go
-          sed -i "s/Standards-Version: \*.*\"/Standards-Version: \"${GITHUB_REF_NAME}\"/" .goreleaser/debian/control
-          git config --global user.email "github-actions[bot]@users.noreply.github.com"
-          git config --global user.name "github-actions[bot]"
-          git add pkg/version/version.go
-          git commit -m "Update version to ${GITHUB_REF_NAME}"
-          git push origin main
   goreleaser:
-    needs: update-version
     runs-on: ubuntu-latest
     steps:
       - name: Checkout

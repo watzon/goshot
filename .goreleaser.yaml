@@ -10,12 +10,16 @@ builds:
     goos:
       - linux
       - windows
+      - darwin
     goarch:
       - amd64
       - arm64
       - arm
     goarm:
       - "7"
+    ignore:
+      - goos: darwin
+        goarch: arm
     main: ./cmd/goshot
     ldflags:
       - -s -w
@@ -25,17 +29,14 @@ nfpms:
   - vendor: Chris Watson
     homepage: https://github.com/watzon/goshot
     maintainer: Chris Watson <cawatson1993@gmail.com>
-    description: A screenshot and screen recording tool for Linux
+    description: Create beautiful screenshots of code and terminal output
     license: MIT
     formats:
       - deb
       - rpm
-    dependencies:
-      - libx11-dev
-      - libxrandr-dev
-      - libxinerama-dev
-      - libxcursor-dev
-      - libxfixes-dev
+    recommends:
+      - xclip
+      - wl-clipboard
 
 archives:
   - format: tar.gz
