@@ -20,6 +20,8 @@ builds:
     ignore:
       - goos: darwin
         goarch: arm
+      - goos: windows
+        goarch: arm
     main: ./cmd/goshot
     ldflags:
       - -s -w
